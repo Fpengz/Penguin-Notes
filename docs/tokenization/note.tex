@@ -1,0 +1,1115 @@
+% ============================================================
+%  Notes on Tokenization, Perplexity, Cross-Entropy,
+%  Scaling Laws, Transformers, and Emergent Reasoning
+% ============================================================
+\documentclass[11pt,a4paper]{article}
+
+% ---- Layout ------------------------------------------------
+\usepackage[top=1in, bottom=1in, left=1.1in, right=1.1in]{geometry}
+
+% ---- Typography --------------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ---- Math --------------------------------------------------
+\usepackage{amsmath, amssymb, amsthm, mathtools, bm}
+
+% ---- Colors & Graphics -------------------------------------
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{xurl}
+
+% ---- Tables ------------------------------------------------
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+
+% ---- Lists -------------------------------------------------
+\usepackage{enumitem}
+
+% ---- Section Formatting ------------------------------------
+\usepackage{titlesec}
+\usepackage{titletoc}
+
+% ---- Header / Footer ---------------------------------------
+\usepackage{fancyhdr}
+
+% ---- Boxes & Frames ----------------------------------------
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable, theorems}
+
+% ---- Hyperlinks --------------------------------------------
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = RoyalBlue,
+  citecolor  = RoyalBlue,
+  urlcolor   = RoyalBlue,
+  pdftitle   = {Notes on LLMs: Theory and Foundations},
+  pdfauthor  = {},
+}
+
+% ---- Bibliography ------------------------------------------
+\usepackage[numbers, sort&compress]{natbib}
+\bibliographystyle{plainnat}
+
+% ============================================================
+%  COLOUR PALETTE
+% ============================================================
+\definecolor{primary}{RGB}{31, 73, 125}      % deep navy
+\definecolor{accent}{RGB}{0, 112, 192}       % bright blue
+\definecolor{boxbg}{RGB}{235, 243, 252}      % light blue tint
+\definecolor{theorembg}{RGB}{240, 248, 240}  % light green tint
+\definecolor{warningbg}{RGB}{255, 248, 230}  % light amber
+\definecolor{rulecolor}{RGB}{0, 112, 192}
+\definecolor{shaderow}{RGB}{240, 246, 255}
+
+% ============================================================
+%  SECTION FORMATTING
+% ============================================================
+\titleformat{\section}
+  {\large\bfseries\color{primary}}
+  {\thesection}{1em}{}
+  [\vspace{-2pt}\textcolor{accent}{\rule{\linewidth}{0.6pt}}]
+
+\titleformat{\subsection}
+  {\normalsize\bfseries\color{accent}}
+  {\thesubsection}{1em}{}
+
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\itshape\color{primary!80}}
+  {\thesubsubsection}{1em}{}
+
+\titlespacing{\section}{0pt}{16pt}{6pt}
+\titlespacing{\subsection}{0pt}{10pt}{4pt}
+
+% ============================================================
+%  HEADER / FOOTER
+% ============================================================
+\pagestyle{fancy}
+\fancyhf{}
+\setlength{\headheight}{22pt}
+\fancyhead[L]{\small\color{primary}\textit{LLM Theory: Foundations}}
+\fancyhead[R]{\small\color{primary}\thepage}
+\fancyfoot[C]{\small\color{gray!60}\rule{0.4\linewidth}{0.4pt}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{accent}\leaders\hrule height \headrulewidth\hfill}}
+
+% ============================================================
+%  TCOLORBOX ENVIRONMENTS
+% ============================================================
+
+%% Key Result box (blue)
+\newtcolorbox{keyresult}[1][]{
+  enhanced, breakable,
+  colback   = boxbg,
+  colframe  = accent,
+  arc       = 3pt,
+  boxrule   = 0.8pt,
+  left      = 8pt, right = 8pt, top = 6pt, bottom = 6pt,
+  fonttitle = \bfseries\small\color{primary},
+  title     = {#1},
+}
+
+%% Definition box (green tint)
+\newtcolorbox{defbox}[1][]{
+  enhanced, breakable,
+  colback   = theorembg,
+  colframe  = OliveGreen!70,
+  arc       = 3pt,
+  boxrule   = 0.8pt,
+  left      = 8pt, right = 8pt, top = 6pt, bottom = 6pt,
+  fonttitle = \bfseries\small\color{OliveGreen!80!black},
+  title     = {#1},
+}
+
+%% Caution / remark box (amber)
+\newtcolorbox{cautionbox}[1][]{
+  enhanced, breakable,
+  colback   = warningbg,
+  colframe  = Goldenrod!80!black,
+  arc       = 3pt,
+  boxrule   = 0.8pt,
+  left      = 8pt, right = 8pt, top = 6pt, bottom = 6pt,
+  fonttitle = \bfseries\small\color{Goldenrod!70!black},
+  title     = {#1},
+}
+
+%% Synthesis / summary box (grey tint)
+\newtcolorbox{synthbox}[1][Summary]{
+  enhanced, breakable,
+  colback   = gray!7,
+  colframe  = gray!50,
+  arc       = 3pt,
+  boxrule   = 0.8pt,
+  left      = 8pt, right = 8pt, top = 6pt, bottom = 6pt,
+  fonttitle = \bfseries\small\color{gray!60!black},
+  title     = {#1},
+}
+
+% ============================================================
+%  THEOREM ENVIRONMENTS
+% ============================================================
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{remark}{Remark}[section]
+\newtheorem{example}{Example}[section]
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}[section]
+
+% ============================================================
+%  CUSTOM COMMANDS
+% ============================================================
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\KL}[2]{\mathrm{KL}\!\left(#1\,\|\,#2\right)}
+\newcommand{\PPL}{\mathrm{PPL}}
+\newcommand{\Hc}{H}
+\newcommand{\tloss}{\mathcal{L}}
+
+% ============================================================
+%  TABLE OF CONTENTS FORMATTING
+% ============================================================
+\setcounter{tocdepth}{2}
+
+% ============================================================
+%  DOCUMENT
+% ============================================================
+\begin{document}
+
+% ---- Title Page --------------------------------------------
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+  \pagecolor{primary}
+  \color{white}
+  \vspace*{4cm}
+  \begin{center}
+    {\Huge\bfseries Notes on Large Language Models}\\[0.6em]
+    {\Large\itshape Theory and Foundations}\\[2.5em]
+    \textcolor{accent!60!white}{\rule{0.5\linewidth}{1pt}}\\[1.8em]
+    {\normalsize
+      Tokenization\enspace$\cdot$\enspace
+      Cross-Entropy \& Perplexity\enspace$\cdot$\enspace
+      KL Divergence\\[0.4em]
+      Scaling Laws\enspace$\cdot$\enspace
+      Transformer Architecture\enspace$\cdot$\enspace
+      Emergent Reasoning
+    }\\[3em]
+    {\small\color{gray!40} Self-study reference notes}
+  \end{center}
+  \vfill
+  \begin{center}
+    {\small\color{gray!40}\today}
+  \end{center}
+\end{titlepage}
+\pagecolor{white}\color{black}
+
+% ---- TOC ---------------------------------------------------
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+\hypersetup{pageanchor=true}
+\pagenumbering{arabic}
+
+% ============================================================
+\section{Introduction}
+% ============================================================
+
+These notes provide a mathematically grounded treatment of several core concepts
+underlying modern large language models (LLMs).
+The exposition is self-contained and proceeds from first principles,
+covering the following topics in order:
+
+\begin{enumerate}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{Tokenization} --- how raw text is mapped into discrete symbols,
+        and why this choice affects both computational and statistical difficulty.
+  \item \textbf{Language modeling objective} --- autoregressive factorization
+        and negative log-likelihood training.
+  \item \textbf{Cross-entropy and KL divergence} --- the information-theoretic
+        interpretation of LLM training.
+  \item \textbf{Perplexity} --- a practical measure of predictive uncertainty.
+  \item \textbf{Scaling laws} --- empirical power-law relationships between
+        scale and loss.
+  \item \textbf{Transformer architecture} --- self-attention, feedforward layers,
+        and expressive capacity.
+  \item \textbf{Emergent reasoning} --- why structured reasoning can arise
+        from next-token prediction at scale.
+\end{enumerate}
+
+\medskip
+\noindent
+\textbf{Notation.}\enspace
+Throughout, let raw text be mapped into a sequence of discrete tokens
+\[
+  x \;\mapsto\; (t_1, t_2, \dots, t_n), \qquad t_i \in V,
+\]
+where $V$ is a finite vocabulary.
+We write $t_{<i} := (t_1, \dots, t_{i-1})$ for the prefix preceding position $i$.
+$P^*$ denotes the true (unknown) distribution of natural language text.
+$P_\theta$ denotes the model's learned distribution, parameterised by $\theta$.
+
+% ============================================================
+\section{Tokenization}
+% ============================================================
+
+\subsection{Formal Definition}
+
+\begin{defbox}[Definition: Tokenizer]
+A \textit{tokenizer} is a mapping
+\[
+  T : \mathcal{X} \;\longrightarrow\; V^{*},
+\]
+from raw text space $\mathcal{X}$ to finite sequences over a discrete vocabulary $V$.
+The output $T(x) = (t_1, \dots, t_n)$ is the \emph{token sequence} on which
+language modeling is performed.
+\end{defbox}
+
+Language modeling therefore operates on $T(x)$, not on $x$ directly.
+This indirection has far-reaching consequences.
+
+\subsection{Computational Consequences}
+
+For a Transformer, self-attention over a sequence of length $n$ costs approximately
+\[
+  O\!\left(n^2 d\right),
+\]
+where $d$ is the model's hidden dimension \cite{vaswani2017attention}.
+A tokenizer that produces longer sequences therefore increases:
+compute per forward pass, peak memory, inference latency, and
+the effective horizon that must be handled in long-context settings.
+Efficient tokenization directly reduces these costs.
+
+\subsection{Statistical Consequences}
+
+Tokenization changes the \emph{coordinate system} of the learning problem.
+Specifically, it alters:
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item the sequence length $n$,
+  \item the vocabulary distribution $\Pr(t)$,
+  \item the difficulty of each conditional $P^*(t_i \mid t_{<i})$,
+  \item and the amount of data available to estimate each unit.
+\end{itemize}
+
+A rare token type is harder to model well than a frequent one,
+so the tokenizer's choice of merge granularity affects statistical efficiency.
+
+\subsection{Compression--Learnability Trade-off}
+
+A good tokenizer must balance two competing objectives:
+
+\begin{enumerate}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{Compression}: short token sequences reduce sequence length $n$.
+  \item \textbf{Learnability}: token units must recur frequently enough for
+        the model to estimate their conditionals reliably.
+\end{enumerate}
+
+This can be formalised through a \emph{minimum description length} (MDL) lens \cite{grunwald2007mdl}:
+\[
+  L(\text{text})
+  \;\approx\;
+  \underbrace{L(\text{token sequence})}_{\text{representation cost}}
+  \;+\;
+  \underbrace{L(\text{model needed to predict it})}_{\text{model cost}}.
+\]
+A tokenizer that minimises only the first term (very long tokens, small $n$)
+may dramatically increase the second term because rare token types are hard to model.
+The optimal tokenizer minimises the total description length.
+
+\subsection{Byte Pair Encoding}
+
+Byte Pair Encoding (BPE) \cite{sennrich2016bpe} is the most widely used subword
+tokenization algorithm.
+It begins with a character-level vocabulary and iteratively merges the most frequent
+adjacent pair of symbols, until a target vocabulary size is reached.
+Formally, the guiding heuristic is:
+\[
+  \text{frequent adjacent patterns} \;\longrightarrow\; \text{single merged token}.
+\]
+WordPiece \cite{schuster2012wordpiece} and Unigram LM \cite{kudo2018sentencepiece}
+are alternative approaches that optimise slightly different objectives.
+
+\begin{keyresult}[Key insight: tokenization as compression]
+BPE achieves compression by assigning short codes (single tokens) to frequent patterns,
+analogous to Huffman coding in information theory.
+The expected code length under BPE is close to the empirical entropy of the
+byte-pair distribution on the training corpus.
+\end{keyresult}
+
+\subsection{Tokenization Biases}
+
+Tokenization can introduce systematic biases that affect fairness and performance:
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.35}
+\rowcolors{2}{shaderow}{white}
+\begin{tabularx}{\linewidth}{@{} l X @{}}
+  \toprule
+  \rowcolor{primary!15}
+  \textbf{Bias type} & \textbf{Description} \\
+  \midrule
+  Frequency bias      & Frequent words receive shorter encodings than rare words, making rare words more expensive to model. \\
+  Language bias       & Languages underrepresented in tokenizer training may be fragmented into more tokens per word, increasing cost and degrading performance \cite{rust2021good}. \\
+  Domain bias         & Code, mathematics, biological sequences, and financial identifiers may be split inefficiently across tokens. \\
+  Morphological bias  & Morphologically rich languages (Finnish, Turkish, Arabic) produce much longer sequences, compounding all the above. \\
+  Numeric bias        & Numbers may be split character-by-character, making arithmetic harder \cite{nogueira2021investigating}. \\
+  \bottomrule
+\end{tabularx}
+\caption{Common biases induced by subword tokenization.}
+\label{tab:tokenization-biases}
+\end{table}
+
+% ============================================================
+\section{The Language Modeling Objective}
+% ============================================================
+
+\subsection{Autoregressive Factorization}
+
+By the chain rule of probability, any joint distribution over a sequence
+$(t_1, \dots, t_n)$ factorises as:
+\[
+  P(t_1, \dots, t_n)
+  = \prod_{i=1}^{n} P(t_i \mid t_{<i}).
+\]
+
+An \textit{autoregressive language model} parameterises each factor:
+\[
+  P_\theta(t_1, \dots, t_n)
+  = \prod_{i=1}^{n} P_\theta(t_i \mid t_{<i}).
+\]
+
+This factorisation is exact (no independence assumption), causal (each prediction
+conditions only on the past), and tractable (each factor is a distribution over
+the finite vocabulary $V$).
+
+\subsection{Training Objective}
+
+Maximum likelihood estimation (MLE) over a training corpus $\mathcal{D}$
+is equivalent to minimising the \emph{negative log-likelihood} (NLL):
+\[
+  \tloss(\theta)
+  = -\sum_{i=1}^{n} \log P_\theta(t_i \mid t_{<i}).
+\]
+
+Averaged over the empirical data distribution $\hat{P}$, this becomes
+\[
+  \tloss(\theta)
+  = -\,\E_{(t_1,\dots,t_n)\sim \hat{P}}
+    \!\left[\sum_{i=1}^{n} \log P_\theta(t_i \mid t_{<i})\right].
+\]
+
+\begin{remark}
+  MLE training with an autoregressive factorisation is also called
+  \emph{teacher forcing}: the model is always conditioned on ground-truth
+  prefixes during training, not on its own previous predictions.
+  This creates a \emph{train-test discrepancy} (exposure bias) that can
+  affect generation quality at test time \cite{bengio2015scheduled}.
+\end{remark}
+
+% ============================================================
+\section{Cross-Entropy and KL Divergence}
+% ============================================================
+
+\subsection{Cross-Entropy}
+
+Let $P^*(t_i \mid t_{<i})$ denote the true conditional distribution and
+$P_\theta(t_i \mid t_{<i})$ the model's approximation.
+The \emph{cross-entropy} between $P^*$ and $P_\theta$ is defined as:
+\[
+  \Hc(P^*, P_\theta)
+  = -\,\E_{P^*}\!\left[\log P_\theta\right].
+\]
+
+The NLL training loss is precisely the empirical estimate of this cross-entropy.
+
+\subsection{The KL Decomposition}
+
+A fundamental identity in information theory is:
+
+\begin{keyresult}[Cross-entropy decomposition]
+\[
+  \Hc(P^*, P_\theta)
+  \;=\;
+  \underbrace{\Hc(P^*)}_{\text{irreducible entropy}}
+  \;+\;
+  \underbrace{\KL{P^*}{P_\theta}}_{\text{model excess}},
+\]
+where $\Hc(P^*) = -\E_{P^*}[\log P^*]$ is the entropy of the true distribution
+and $\KL{P^*}{P_\theta} = \E_{P^*}\!\left[\log \frac{P^*}{P_\theta}\right] \geq 0$.
+\end{keyresult}
+
+\noindent
+Since $\Hc(P^*)$ does not depend on $\theta$, minimising cross-entropy is
+\emph{exactly equivalent} to minimising the KL divergence from $P^*$ to $P_\theta$:
+\[
+  \min_\theta\;\Hc(P^*, P_\theta)
+  \;\Longleftrightarrow\;
+  \min_\theta\;\KL{P^*}{P_\theta}.
+\]
+
+\subsection{Interpretation}
+
+\begin{keyresult}[Information-theoretic view of LLM training]
+Training an LLM is equivalent to finding the closest approximation $P_\theta$
+to the true distribution of language $P^*$, in the sense of KL divergence.
+The irreducible entropy $\Hc(P^*)$ represents the intrinsic unpredictability
+of natural language and sets a fundamental floor on achievable loss.
+\end{keyresult}
+
+\noindent
+The quantity $\KL{P^*}{P_\theta}$ measures the information lost per token
+when using the model $P_\theta$ instead of the true distribution $P^*$.
+It equals zero if and only if $P_\theta = P^*$ almost everywhere.
+
+\subsection{Bits-Per-Character and Other Units}
+
+Cross-entropy is often reported in \emph{nats} (natural log) or \emph{bits}
+(log base 2). The conversion is:
+\[
+  \text{bits-per-token}
+  = \frac{\Hc(P^*, P_\theta)}{\ln 2}.
+\]
+Bits-per-character (BPC) is also common, normalising by the average number of
+characters per token.
+
+% ============================================================
+\section{Perplexity}
+% ============================================================
+
+\subsection{Definition}
+
+\begin{defbox}[Definition: Perplexity]
+The \emph{perplexity} of a model $P_\theta$ on a token sequence $(t_1, \dots, t_n)$
+is defined as:
+\[
+  \PPL
+  = \exp\!\left(-\frac{1}{n}\sum_{i=1}^{n} \log P_\theta(t_i \mid t_{<i})\right)
+  = e^{\,\ell},
+\]
+where $\ell$ is the mean NLL per token.
+\end{defbox}
+
+\subsection{Interpretation}
+
+Perplexity admits several complementary interpretations:
+
+\begin{enumerate}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{Geometric mean inverse probability.}
+        $\PPL = \left(\prod_{i=1}^n P_\theta(t_i \mid t_{<i})\right)^{-1/n}$.
+        This is the geometric mean of the reciprocal probabilities assigned
+        to the correct next token.
+  \item \textbf{Effective branching factor.}
+        Heuristically, $\PPL \approx k$ means the model behaves as if it is
+        choosing uniformly among $k$ equally likely continuations at each step.
+  \item \textbf{Exponential of cross-entropy.}
+        Since the mean NLL estimates $\Hc(P^*, P_\theta)$, we have
+        $\PPL \approx e^{\Hc(P^*, P_\theta)}$.
+\end{enumerate}
+
+Lower perplexity indicates better predictive performance.
+A model that perfectly predicted every token would have $\PPL = 1$.
+A model that assigned uniform probability over $|V|$ tokens at every step would
+have $\PPL = |V|$ (often $\sim 50{,}000$).
+
+\subsection{Dependence on Tokenization}
+
+\begin{cautionbox}[Caution: cross-tokenizer comparisons]
+Perplexity values are \textbf{not directly comparable} across different tokenizers.
+A tokenizer that splits text into more tokens (larger $n$) will generally yield
+lower per-token perplexity for the same model, simply because each prediction
+task is easier.
+Normalisation by character count (bits-per-character) is necessary for
+fair cross-tokenizer comparison.
+\end{cautionbox}
+
+% ============================================================
+\section{How Tokenization Affects Loss}
+% ============================================================
+
+Consider a concept represented as a single token $u$ under tokenizer $T_1$,
+but split into $m$ subtokens $(s_1, \dots, s_m)$ under tokenizer $T_2$.
+
+The loss contributions are:
+\[
+  \tloss_{T_1} = -\log P_\theta(u \mid \text{context}),
+  \qquad
+  \tloss_{T_2} = -\sum_{j=1}^{m} \log P_\theta(s_j \mid s_{<j}, \text{context}).
+\]
+
+Under $T_2$, the model must predict $m$ tokens instead of one.
+While each individual prediction may be easier (smaller effective vocabulary
+at each step), the model must also maintain coherence across $m$ positions
+and attend over a larger context window.
+
+This affects:
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{Optimisation difficulty}: more gradient steps touch a single concept.
+  \item \textbf{Attention burden}: dependencies span more positions.
+  \item \textbf{Statistical efficiency}: each subtoken individually has less
+        informational content, requiring more data to estimate its distribution well.
+  \item \textbf{Final model quality}: tasks requiring exact reconstruction
+        of multi-token units (e.g., arithmetic, identifiers) become harder.
+\end{itemize}
+
+% ============================================================
+\section{Scaling Laws}
+% ============================================================
+
+\subsection{Empirical Form}
+
+A central empirical finding \cite{kaplan2020scaling, hoffmann2022training} is
+that language-model loss follows approximate power laws in scale:
+
+\begin{keyresult}[Scaling law (Kaplan et al.)]
+\[
+  \tloss(N) \;\approx\; A\,N^{-\alpha} + B,
+\]
+where $N$ may denote model parameters, training tokens, or compute (FLOPs);
+$A > 0$ and $\alpha > 0$ are empirically fitted constants;
+and $B > 0$ is the \emph{irreducible loss floor} corresponding to $\Hc(P^*)$.
+\end{keyresult}
+
+\noindent
+Typical values from the literature are $\alpha \approx 0.07$--$0.1$ for model
+size and $\alpha \approx 0.27$--$0.35$ for data \cite{kaplan2020scaling}.
+
+\subsection{The Chinchilla Scaling Laws}
+
+Hoffmann et al.\ \cite{hoffmann2022training} (``Chinchilla'') established a
+critical revision of earlier scaling prescriptions.
+Given a fixed compute budget $C$ (measured in FLOPs), the optimal allocation is:
+\[
+  N^* \;\propto\; C^{0.5}, \qquad D^* \;\propto\; C^{0.5},
+\]
+implying that the number of training tokens $D$ should scale roughly \emph{linearly}
+with the number of parameters $N$.
+This led to the practical rule of thumb:
+\[
+  D^* \approx 20 \times N.
+\]
+
+Many models prior to Chinchilla were significantly \emph{undertrained} relative
+to their parameter count.
+
+\subsection{Why Scaling Helps}
+
+Natural language contains structure at many levels simultaneously:
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item local syntax and morphology,
+  \item long-range semantic coherence,
+  \item world knowledge and factual regularities,
+  \item discourse and pragmatic patterns,
+  \item latent reasoning chains.
+\end{itemize}
+
+Larger models have sufficient \emph{capacity} to represent more of these patterns.
+Larger datasets \emph{expose} the model to more of them.
+More compute allows optimisation to \emph{exploit} this capacity.
+Together, these push $P_\theta \to P^*$.
+
+\subsection{Emergent Capabilities}
+
+Beyond smooth reductions in loss, scaling is associated with \emph{emergent capabilities}:
+qualitative abilities that appear to arise discontinuously above certain thresholds
+\cite{wei2022emergent}.
+Examples include few-shot in-context learning, multi-step arithmetic, and
+chain-of-thought reasoning.
+The emergence phenomenon is debated: some analyses suggest it is an artefact of
+non-linear evaluation metrics rather than a true phase transition
+\cite{schaeffer2023emergent}.
+
+% ============================================================
+\section{Transformer Architecture}
+% ============================================================
+
+\subsection{Input Representation}
+
+Each token $t_i$ is first mapped to a $d$-dimensional embedding vector $\mathbf{e}_i \in \R^d$,
+and a \emph{positional encoding} $\mathbf{p}_i \in \R^d$ is added:
+\[
+  \mathbf{x}_i^{(0)} = \mathbf{e}_i + \mathbf{p}_i.
+\]
+
+Original Transformers used sinusoidal positional encodings \cite{vaswani2017attention};
+modern LLMs typically use Rotary Position Embeddings (RoPE) \cite{su2024rope}
+or ALiBi \cite{press2022alibi}, which generalise better to sequence lengths
+beyond those seen during training.
+
+\subsection{Self-Attention}
+
+At each layer $\ell$, the input matrix $X \in \R^{n \times d}$ is linearly
+projected into queries, keys, and values:
+\[
+  Q = X W_Q, \quad K = X W_K, \quad V = X W_V,
+  \qquad W_Q, W_K, W_V \in \R^{d \times d_k}.
+\]
+
+The scaled dot-product attention output is:
+\[
+  \mathrm{Attention}(Q, K, V)
+  = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V.
+\]
+
+The division by $\sqrt{d_k}$ prevents the dot products from growing large in
+magnitude when $d_k$ is large, which would saturate the softmax and cause
+vanishing gradients.
+
+\subsubsection{Causal Masking}
+
+For autoregressive generation, a \emph{causal mask} is applied to the attention
+matrix, setting all entries at positions $(i, j)$ with $j > i$ to $-\infty$
+before the softmax.
+This ensures that $P_\theta(t_i \mid t_{<i})$ cannot attend to future tokens:
+\[
+  A_{ij} = \begin{cases}
+    \dfrac{\mathbf{q}_i \cdot \mathbf{k}_j}{\sqrt{d_k}} & j \leq i, \\[6pt]
+    -\infty & j > i.
+  \end{cases}
+\]
+
+\subsubsection{Multi-Head Attention}
+
+In practice, attention is computed in $H$ parallel \emph{heads}, each with
+its own projection matrices $W_Q^{(h)}, W_K^{(h)}, W_V^{(h)} \in \R^{d \times d_k}$
+where $d_k = d/H$:
+\[
+  \mathrm{MultiHead}(Q, K, V)
+  = \mathrm{Concat}\!\left(\mathrm{head}_1, \dots, \mathrm{head}_H\right) W_O,
+\]
+\[
+  \mathrm{head}_h = \mathrm{Attention}\!\left(QW_Q^{(h)}, KW_K^{(h)}, VW_V^{(h)}\right).
+\]
+
+Multiple heads allow the model to jointly attend to information from different
+representation subspaces at different positions.
+
+\subsection{Position-wise Feedforward Layer}
+
+Each Transformer layer also contains a two-layer feedforward network applied
+independently to each position:
+\[
+  \mathrm{FFN}(\mathbf{x}) = \sigma\!\left(\mathbf{x} W_1 + \mathbf{b}_1\right) W_2 + \mathbf{b}_2,
+\]
+where $\sigma$ is typically GELU \cite{hendrycks2016gelu} or SwiGLU \cite{shazeer2020glu}
+in modern LLMs, and the inner dimension is expanded (commonly $4d$).
+
+\subsection{Layer Normalization and Residual Connections}
+
+Each sub-layer (attention or FFN) is wrapped with a \emph{residual connection}
+and \emph{layer normalization} \cite{ba2016layer}:
+\[
+  \mathbf{x}^{(\ell+1)} = \mathrm{LayerNorm}\!\left(\mathbf{x}^{(\ell)} + \mathrm{SubLayer}\!\left(\mathbf{x}^{(\ell)}\right)\right).
+\]
+
+Modern LLMs commonly use \emph{pre-normalization} (applying LayerNorm before
+the sub-layer) for improved training stability:
+\[
+  \mathbf{x}^{(\ell+1)} = \mathbf{x}^{(\ell)} + \mathrm{SubLayer}\!\left(\mathrm{LayerNorm}\!\left(\mathbf{x}^{(\ell)}\right)\right).
+\]
+
+\subsection{Why Transformers Are Expressive}
+
+Transformers achieve high expressiveness through the interplay of:
+\begin{enumerate}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{Dynamic, input-dependent routing}: attention weights
+        $\mathrm{softmax}(QK^\top/\sqrt{d_k})$ depend on the actual content,
+        not fixed connections.
+  \item \textbf{Nonlinear transformation}: the FFN layers introduce pointwise
+        nonlinearity at each position.
+  \item \textbf{Depth and composition}: stacking $L$ layers allows successive
+        refinement of representations.
+  \item \textbf{Residual learning}: skip connections preserve gradient flow and
+        allow layers to learn incremental refinements.
+\end{enumerate}
+
+It has been shown that Transformers are Turing-complete under certain conditions
+\cite{perez2021turing}, and universal approximators of sequence-to-sequence functions
+of bounded length \cite{yun2020transformers}.
+
+\begin{keyresult}[Representational capacity of Transformers]
+A sufficiently deep and wide Transformer can approximate any measurable
+sequence-to-sequence function on sequences of bounded length,
+given sufficient precision in its weights.
+\end{keyresult}
+
+% ============================================================
+\section{What an LLM Is Learning}
+% ============================================================
+
+\subsection{Surface and Deep Views}
+
+At the surface level, an LLM learns the next-token conditional:
+\[
+  P_\theta(t_i \mid t_{<i}).
+\]
+
+However, accurately modelling this distribution requires the model to implicitly
+learn a vast amount of structure. To predict the next word in
+\emph{``The capital of France is \underline{\hspace{1em}}''},
+the model must encode the factual association between France and Paris.
+To predict the next line in a proof, it must capture the relevant logical step.
+
+\subsection{Latent Representation Learning}
+
+Internally, the model builds a hierarchy of \emph{hidden representations}:
+\[
+  \mathbf{h}_i^{(\ell)} \in \R^d, \quad i = 1, \dots, n, \quad \ell = 1, \dots, L.
+\]
+
+Empirically, these encode increasingly abstract information with depth:
+early layers capture token-level and syntactic features, middle layers
+semantic and world-knowledge features, and late layers task-specific and
+discourse-level features \cite{tenney2019bert, elhage2021mathematical}.
+
+\subsection{The Bitter Lesson and Scale}
+
+\citet{sutton2019bitter} argues that approaches leveraging computation
+tend to outperform approaches that hand-craft structure.
+LLMs embody this: rather than encoding specific linguistic knowledge,
+they learn it from data at scale, and the learned representations often
+surpass hand-engineered alternatives.
+
+% ============================================================
+\section{Why Reasoning Emerges from Next-Token Prediction}
+% ============================================================
+
+\subsection{Core Mechanism}
+
+\begin{keyresult}[Emergence of reasoning]
+Many next-token predictions are only possible if the model internalises
+latent computational structure. Training pressure therefore incentivises the
+development of internal reasoning capabilities---not because reasoning is
+directly supervised, but because it is \emph{necessary for accurate prediction}.
+\end{keyresult}
+
+\subsection{Formal Perspective}
+
+The training objective is:
+\[
+  \min_\theta -\,\E_{P^*}\!\left[\log P_\theta(\text{text})\right].
+\]
+
+The training corpus contains extensive reasoning traces:
+mathematical proofs, worked examples, explanations, step-by-step tutorials,
+causal arguments, and logical discourse.
+Minimising next-token loss incentivises the model to reproduce these patterns,
+and reproducing them faithfully requires the model to simulate the underlying
+reasoning process.
+
+\subsection{Marginalisation Over Latent Computation}
+
+Let $z$ denote a latent computation (e.g., an intermediate reasoning step)
+that is not explicitly present in the token sequence.
+The model's prediction can be written as:
+\[
+  P_\theta(t_{i+1} \mid c)
+  = \sum_{z} P_\theta(t_{i+1} \mid z, c)\,P_\theta(z \mid c).
+\]
+
+Even though $z$ is never directly supervised, the model may develop internal
+states that approximate this marginalisation, because doing so reduces loss.
+
+\subsection{In-Context Learning}
+
+A striking emergent capability is \emph{in-context learning} (ICL)
+\cite{brown2020gpt3}: given a few examples in the prompt, the model adapts
+its behaviour without any weight update.
+
+A Bayesian interpretation \cite{xie2021explanation} suggests that ICL implements
+implicit posterior inference over the task.
+Because the training data contains tasks with different structures, the model
+learns a prior over tasks, and uses the in-context examples as evidence to
+update this prior at inference time.
+
+\subsection{Chain-of-Thought Reasoning}
+
+Chain-of-thought (CoT) prompting \cite{wei2022cot} significantly improves
+performance on multi-step reasoning tasks by prompting the model to generate
+explicit intermediate steps before the final answer.
+
+Instead of computing
+\[
+  P_\theta(a \mid c),
+\]
+the model instead generates a reasoning trajectory:
+\[
+  P_\theta(a \mid c)
+  \;\approx\;
+  \sum_{r_1, \dots, r_m}
+  P_\theta(a \mid r_1, \dots, r_m, c)\,
+  \prod_{j=1}^{m} P_\theta(r_j \mid r_{<j}, c).
+\]
+
+Making latent steps explicit provides the model with more positions in which
+to carry out intermediate computation, effectively increasing the depth of
+computation available at inference time.
+
+\begin{remark}
+  \citet{feng2023towards} showed that CoT can be necessary: there exist tasks
+  for which Transformers without scratchpad intermediate tokens cannot represent
+  the correct function, but Transformers \emph{with} CoT can.
+\end{remark}
+
+\subsection{Limits: Perplexity Does Not Imply Reasoning}
+
+\begin{cautionbox}[Important caveat]
+Low perplexity does \textbf{not} automatically imply strong reasoning ability.
+Perplexity measures \emph{average} next-token prediction accuracy, but
+reasoning requires:
+\begin{itemize}[leftmargin=1.5em, itemsep=1pt]
+  \item multi-step global consistency,
+  \item stable intermediate state tracking,
+  \item robust generalisation beyond training distributions,
+  \item and often exact correctness rather than high-probability prediction.
+\end{itemize}
+Therefore: $\;\text{low perplexity} \;\not\Rightarrow\; \text{reliable reasoning}$.
+
+Nevertheless, lower perplexity tends to correlate with better reasoning at scale,
+because both arise from a more accurate approximation of $P^*$.
+\end{cautionbox}
+
+% ============================================================
+\section{Overall Synthesis}
+% ============================================================
+
+The following table summarises the relationships between the core concepts
+developed in these notes.
+
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.4}
+\rowcolors{2}{shaderow}{white}
+\begin{tabularx}{\linewidth}{@{} l X @{}}
+  \toprule
+  \rowcolor{primary!15}
+  \textbf{Concept} & \textbf{Role and key formula} \\
+  \midrule
+  Tokenization
+    & Maps text to discrete tokens: $T:\mathcal{X}\to V^*$.
+      Affects sequence length, vocabulary, and modelling difficulty. \\
+  Autoregressive factorisation
+    & $P_\theta(t_1,\dots,t_n) = \prod_i P_\theta(t_i\mid t_{<i})$.
+      Exact, causal, tractable. \\
+  Training loss
+    & Minimise NLL: $\tloss(\theta) = -\sum_i \log P_\theta(t_i\mid t_{<i})$. \\
+  Cross-entropy
+    & $\Hc(P^*,P_\theta) = \Hc(P^*) + \KL{P^*}{P_\theta}$.
+      Training minimises the KL term. \\
+  Perplexity
+    & $\PPL = e^{\,\ell}$.
+      Effective branching factor; not comparable across tokenizers. \\
+  Scaling laws
+    & $\tloss(N)\approx AN^{-\alpha}+B$.
+      Power-law improvement; Chinchilla-optimal: $D^*\approx 20N$. \\
+  Transformer
+    & $\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V$.
+      Dynamic routing + nonlinear composition. \\
+  Emergent reasoning
+    & Forced by prediction accuracy on structured text; enhanced by chain-of-thought
+      and in-context learning. \\
+  \bottomrule
+\end{tabularx}
+\caption{Summary of core concepts.}
+\label{tab:synthesis}
+\end{table}
+
+\begin{synthbox}[Grand synthesis]
+Modern LLMs are parameterised approximations of $P^*$, the true distribution of
+human-generated text.
+Tokenization defines the discrete representation space; autoregressive training
+minimises KL divergence to $P^*$; perplexity quantifies remaining uncertainty;
+and scaling laws describe how this uncertainty decreases with compute.
+Transformers provide the expressive machinery to represent rich, context-dependent
+functions; and reasoning emerges because accurate next-token prediction on
+large-scale, structured human text necessitates the internalisation of latent
+computational and inferential patterns.
+\end{synthbox}
+
+% ============================================================
+\section{Conclusion}
+% ============================================================
+
+These notes have developed a unified, mathematically precise account of the
+core ideas underlying modern LLMs.
+The central thread is the information-theoretic framing: training is KL minimisation,
+perplexity is exponential cross-entropy, and scaling moves $P_\theta$ closer to $P^*$.
+Transformers are the architectural vehicle for this approximation, and their
+expressiveness---combined with the implicit supervision provided by structured
+human text---is sufficient to give rise to emergent capabilities including
+in-context learning and chain-of-thought reasoning.
+
+Several important directions are not covered here, including:
+alignment and RLHF \cite{ouyang2022instructgpt},
+efficient inference (speculative decoding, quantisation),
+mixture-of-experts architectures \cite{fedus2022switch},
+and mechanistic interpretability \cite{elhage2021mathematical}.
+These are natural next topics for further study.
+
+% ============================================================
+%  REFERENCES
+% ============================================================
+\newpage
+\begin{thebibliography}{99}
+
+\bibitem{vaswani2017attention}
+  Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.\ N.,
+  Kaiser, \L., and Polosukhin, I.
+  \newblock Attention is all you need.
+  \newblock \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 30, 2017.
+
+\bibitem{kaplan2020scaling}
+  Kaplan, J., McCandlish, S., Henighan, T., Brown, T.\ B., Chess, B., Child, R.,
+  Gray, S., Radford, A., Wu, J., and Amodei, D.
+  \newblock Scaling laws for neural language models.
+  \newblock \textit{arXiv:2001.08361}, 2020.
+
+\bibitem{hoffmann2022training}
+  Hoffmann, J., Borgeaud, S., Mensch, A., Buchatskaya, E., Cai, T., Rutherford, E.,
+  \textit{et al.}
+  \newblock Training compute-optimal large language models.
+  \newblock \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 35, 2022.
+
+\bibitem{brown2020gpt3}
+  Brown, T.\ B., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P.,
+  \textit{et al.}
+  \newblock Language models are few-shot learners.
+  \newblock \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 33, 2020.
+
+\bibitem{wei2022emergent}
+  Wei, J., Tay, Y., Bommasani, R., Raffel, C., Zoph, B., Borgeaud, S.,
+  \textit{et al.}
+  \newblock Emergent abilities of large language models.
+  \newblock \textit{Transactions on Machine Learning Research}, 2022.
+
+\bibitem{schaeffer2023emergent}
+  Schaeffer, R., Miranda, B., and Koyejo, S.
+  \newblock Are emergent abilities of large language models a mirage?
+  \newblock \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 36, 2023.
+
+\bibitem{wei2022cot}
+  Wei, J., Wang, X., Schuurmans, D., Bosma, M., Ichter, B., Xia, F.,
+  \textit{et al.}
+  \newblock Chain-of-thought prompting elicits reasoning in large language models.
+  \newblock \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 35, 2022.
+
+\bibitem{sennrich2016bpe}
+  Sennrich, R., Haddow, B., and Birch, A.
+  \newblock Neural machine translation of rare words with subword units.
+  \newblock \textit{Proceedings of ACL}, 2016.
+
+\bibitem{kudo2018sentencepiece}
+  Kudo, T. and Richardson, J.
+  \newblock SentencePiece: A simple and language independent subword tokenizer
+  and detokenizer for neural text processing.
+  \newblock \textit{Proceedings of EMNLP (System Demonstrations)}, 2018.
+
+\bibitem{schuster2012wordpiece}
+  Schuster, M. and Nakamura, K.
+  \newblock Japanese and Korean voice search.
+  \newblock \textit{IEEE International Conference on Acoustics, Speech and
+  Signal Processing (ICASSP)}, 2012.
+
+\bibitem{rust2021good}
+  Rust, P., Pfeiffer, J., Vulic, I., Ruder, S., and Gurevych, I.
+  \newblock How good is your tokenizer? On the monolingual performance of
+  multilingual language models.
+  \newblock \textit{Proceedings of ACL}, 2021.
+
+\bibitem{nogueira2021investigating}
+  Nogueira, R., Jiang, Z., and Lin, J.
+  \newblock Investigating the limitations of Transformers with simple arithmetic tasks.
+  \newblock \textit{arXiv:2102.13019}, 2021.
+
+\bibitem{bengio2015scheduled}
+  Bengio, S., Vinyals, O., Jaitly, N., and Shazeer, N.
+  \newblock Scheduled sampling for sequence prediction with recurrent neural networks.
+  \newblock \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 28, 2015.
+
+\bibitem{grunwald2007mdl}
+  Gr\"{u}nwald, P.
+  \newblock \textit{The Minimum Description Length Principle}.
+  \newblock MIT Press, 2007.
+
+\bibitem{su2024rope}
+  Su, J., Ahmed, M., Lu, Y., Pan, S., Bo, W., and Liu, Y.
+  \newblock RoFormer: Enhanced Transformer with Rotary Position Embedding.
+  \newblock \textit{Neurocomputing}, 568, 2024.
+
+\bibitem{press2022alibi}
+  Press, O., Smith, N.\ A., and Lewis, M.
+  \newblock Train short, test long: Attention with linear biases enables
+  input length extrapolation.
+  \newblock \textit{Proceedings of ICLR}, 2022.
+
+\bibitem{hendrycks2016gelu}
+  Hendrycks, D. and Gimpel, K.
+  \newblock Gaussian error linear units (GELUs).
+  \newblock \textit{arXiv:1606.08415}, 2016.
+
+\bibitem{shazeer2020glu}
+  Shazeer, N.
+  \newblock GLU variants improve Transformer.
+  \newblock \textit{arXiv:2002.05202}, 2020.
+
+\bibitem{ba2016layer}
+  Ba, J.\ L., Kiros, J.\ R., and Hinton, G.\ E.
+  \newblock Layer normalization.
+  \newblock \textit{arXiv:1607.06450}, 2016.
+
+\bibitem{perez2021turing}
+  P\'{e}rez, J., Barcel\'{o}, P., and Marinkovic, J.
+  \newblock Attention is Turing-complete.
+  \newblock \textit{Journal of Machine Learning Research}, 22(75):1--35, 2021.
+
+\bibitem{yun2020transformers}
+  Yun, C., Bhojanapalli, S., Rawat, A.\ S., Reddi, S.\ J., and Kumar, S.
+  \newblock Are Transformers universal approximators of sequence-to-sequence functions?
+  \newblock \textit{Proceedings of ICLR}, 2020.
+
+\bibitem{tenney2019bert}
+  Tenney, I., Das, D., and Pavlick, E.
+  \newblock BERT rediscovers the classical NLP pipeline.
+  \newblock \textit{Proceedings of ACL}, 2019.
+
+\bibitem{elhage2021mathematical}
+  Elhage, N., Nanda, N., Olsson, C., Henighan, T., Joseph, N., Mann, B.,
+  \textit{et al.}
+  \newblock A mathematical framework for Transformer circuits.
+  \newblock \textit{Transformer Circuits Thread}, 2021.
+
+\bibitem{xie2021explanation}
+  Xie, S.\ M., Raghunathan, A., Liang, P., and Ma, T.
+  \newblock An explanation of in-context learning as implicit Bayesian inference.
+  \newblock \textit{Proceedings of ICLR}, 2022.
+
+\bibitem[Sutton(2019)]{sutton2019bitter}
+  Sutton, R.
+  \newblock The bitter lesson.
+  \newblock \textit{Incomplete Ideas (blog)}, 2019.
+  \newblock \url{http://www.incompleteideas.net/IncIdeas/BitterLesson.html}.
+
+\bibitem[Feng et~al.(2023)Feng, Zhang, Gu, Ye, He, and Wang]{feng2023towards}
+  Feng, G., Zhang, B., Gu, Y., Ye, H., He, D., and Wang, L.
+  \newblock Towards revealing the mystery behind chain of thought: A theoretical perspective.
+  \newblock \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 36, 2023.
+
+\bibitem{ouyang2022instructgpt}
+  Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C., Mishkin, P.,
+  \textit{et al.}
+  \newblock Training language models to follow instructions with human feedback.
+  \newblock \textit{Advances in Neural Information Processing Systems (NeurIPS)}, 35, 2022.
+
+\bibitem{fedus2022switch}
+  Fedus, W., Zoph, B., and Shazeer, N.
+  \newblock Switch Transformers: Scaling to trillion parameter models with simple
+  and efficient sparsity.
+  \newblock \textit{Journal of Machine Learning Research}, 23(120):1--39, 2022.
+
+\end{thebibliography}
+
+\end{document}
